@@ -1,6 +1,30 @@
-bool publish_data(void *)
+bool b_bluetooth_comms(void *){
+    if (deviceConnected) {
+        pTxCharacteristic->setValue(String(state)+ ","+ String(hit_counter));
+        pTxCharacteristic->notify();
+		//delay(10); // bluetooth stack will go into congestion, if too many packets are sent
+	}
+
+    // disconnecting
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500); // give the bluetooth stack the chance to get things ready
+        pServer->startAdvertising(); // restart advertising
+        Serial.println("start advertising");
+        oldDeviceConnected = deviceConnected;
+    }
+    // connecting
+    if (deviceConnected && !oldDeviceConnected) {
+		// do stuff here on connecting
+        oldDeviceConnected = deviceConnected;
+    }
+    return true;
+}
+
+
+
+bool publish_data_sensors(void *)
 { 
-  v_read_sensors();
+
   delay(1);
   for (int i=0; i<8; i++)
   {
@@ -9,32 +33,42 @@ bool publish_data(void *)
   }
 
   Serial.print("\n");
+
   return true;
 }
 
 bool breath()
 {
+  
+  for (int i=0; i<NUM_LEDS; i++){ 
+      leds[i] = CRGB(brightness, brightness, brightness);
+  }
+  FastLED.show();
+  delay(1);
+  for (int i=0; i<8; i++)
+  {
+      if (reads[i]>THRESHOLD){return false;} 
+  }
 
-  for (int j=10; j<MAX_BRIGHTNESS; j++){
-    for (int i=0; i<NUM_LEDS; i++){ 
-      leds[i] = CRGB(j, j, j);
-    }
-    FastLED.show();
-    delay(1);
-    if (reads[UP_RIGHT]>THRESHOLD){return false;}
-    delay(10);
-    
+
+  if (brightness==int(MAX_BRIGHTNESS*0.2))
+  {
+    increasing=false;
   }
-  for (int j=MAX_BRIGHTNESS; j>10; j--){
-    for (int i=0; i<NUM_LEDS; i++){ 
-      leds[i] = CRGB(j, j, j);
-    }
-    FastLED.show();
-    delay(1);
-    v_read_sensors();
-    if (reads[UP_RIGHT]>THRESHOLD){return false;}
-    delay(10);
+  if (brightness==5)
+  {
+    increasing=true;
   }
+
+  if (increasing)
+  {
+      brightness+=1;
+  }
+  else
+  {
+      brightness-=1;
+  }
+
   return true;
 
 }
@@ -43,7 +77,7 @@ bool countdown(void *) {
     FastLED.clear();
     for (int i = 0; i < NUM_LEDS; i++) {
       if (i < countdown_led){
-        leds[i] = CRGB(MAX_BRIGHTNESS, 0 , 0);
+        leds[i] = CRGB(0, 0 , MAX_BRIGHTNESS);
       }
       else
       {
@@ -60,7 +94,9 @@ bool countdown(void *) {
 }
 
 
-bool v_read_sensors()
+
+
+bool b_read_sensors(void *)
 {
   reads[UP_RIGHT] = analogRead(knockSensor_up_right);
   reads[UP_LEFT] = analogRead(knockSensor_up_left);

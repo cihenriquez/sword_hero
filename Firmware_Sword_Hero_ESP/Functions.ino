@@ -9,7 +9,7 @@ bool b_bluetooth_comms(void *){
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
+        if (DEBUG){Serial.println("start advertising");}
         oldDeviceConnected = deviceConnected;
     }
     // connecting
@@ -24,12 +24,16 @@ bool b_bluetooth_comms(void *){
 
 bool publish_data_sensors(void *)
 { 
-
   delay(1);
-  for (int i=0; i<8; i++)
+  int num_sensors = sizeof(reads) / sizeof(reads[0]); // Calcula el número de sensores dinámicamente
+  
+  for (int i = 0; i < num_sensors; i++)
   {
       Serial.print(reads[i]);
-      Serial.print(",");
+      if (i < num_sensors - 1)  // Evita imprimir la última coma
+      {
+          Serial.print(",");
+      }
   }
 
   Serial.print("\n");
@@ -98,17 +102,23 @@ bool countdown(void *) {
 
 bool b_read_sensors(void *)
 {
-  reads[UP_RIGHT] = analogRead(knockSensor_up_right);
-  reads[UP_LEFT] = analogRead(knockSensor_up_left);
-  reads[DOWN_RIGHT]  = analogRead(knockSensor_down_right);
-  reads[DOWN_LEFT] = analogRead(knockSensor_down_left);
-  reads[CENTER_DOWN] = analogRead(knockSensor_center_down);
-  reads[CENTER_UP] = analogRead(knockSensor_center_up);
-  reads[UP] = interpolate_reads(reads[UP_LEFT], reads[UP_RIGHT]);
-  reads[DOWN] = interpolate_reads(reads[DOWN_LEFT],reads[DOWN_RIGHT]);
-  reads[LEFT] = interpolate_reads(reads[UP_LEFT], reads[DOWN_LEFT]);
-  reads[RIGHT] = interpolate_reads(reads[UP_RIGHT],reads[DOWN_RIGHT]);
+  reads[DOWN_RIGHT] = ads1.readADC_SingleEnded(0);
+  reads[DOWN]       = ads2.readADC_SingleEnded(0); 
+  reads[RIGHT]      = ads1.readADC_SingleEnded(1);
+  reads[DOWN_LEFT]  = ads2.readADC_SingleEnded(1);
+  reads[UP_RIGHT]   = ads1.readADC_SingleEnded(2);
+  reads[LEFT]       = ads2.readADC_SingleEnded(2); 
+  reads[UP]         = ads1.readADC_SingleEnded(3);
+  reads[UP_LEFT]    = ads2.readADC_SingleEnded(3);
+  
+  
+  
 
+  //reads[CENTER_DOWN] = analogRead(PIN_SENSOR_CENTER_DOWN);
+  //reads[CENTER_UP] = analogRead(PIN_SENSOR_CENTER_UP);
+  
+  
+  if (DEBUG){publish_data_sensors(nullptr);}
   return true;
   
 }

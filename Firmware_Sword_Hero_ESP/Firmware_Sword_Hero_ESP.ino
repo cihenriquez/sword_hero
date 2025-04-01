@@ -1,7 +1,7 @@
 #include <FastLED.h>
 #include <arduino-timer.h>
 
-
+#include <Adafruit_ADS1X15.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
@@ -11,14 +11,28 @@
 
 
 
+#define DEBUG false
+
 #define LED_PIN 14          // Replace with the pin number you used for DATA connection
 #define NUM_LEDS 24         // Replace with the number of LEDs in your strip
 #define FADE_DELAY 1        // Delay between brightness changes (in milliseconds)
 #define MAX_BRIGHTNESS 255  //255 // Maximum brightness value
 #define LEDS_PER_DIV 4
-#define THRESHOLD 700
+#define THRESHOLD 3000
+#define PREP_TIME_MS 1000
 #define LED_BUILTIN 2
 
+
+#define PIN_SENSOR_DOWN_RIGHT 39
+#define PIN_SENSOR_RIGHT 26
+#define PIN_SENSOR_UP_RIGHT 35  
+#define PIN_SENSOR_UP 32
+#define PIN_SENSOR_UP_LEFT 34
+#define PIN_SENSOR_LEFT 25
+#define PIN_SENSOR_DOWN_LEFT 36
+#define PIN_SENSOR_DOWN 33
+#define PIN_SENSOR_CENTER_DOWN 12
+#define PIN_SENSOR_CENTER_UP 13
 
 #define DOWN_RIGHT 0
 #define RIGHT_DOWN 0
@@ -51,7 +65,8 @@
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-
+#define ADC_1_I2C_ADDR 0x48
+#define ADC_2_I2C_ADDR 0x4A
 
 // Check if Bluetooth is available
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
@@ -64,36 +79,32 @@
 #endif
 
 CRGB leds[NUM_LEDS];
+Adafruit_ADS1115 ads1;  /* Use this for the 16-bit version */
+Adafruit_ADS1115 ads2;  /* Use this for the 16-bit version */
 
-const int knockSensor_up_right = 35;  //pulldown -> 1.5M Ohm
-const int knockSensor_down_right = 39;
-const int knockSensor_up_left = 34;
-const int knockSensor_down_left = 36;
-const int knockSensor_center_down = 26;
-const int knockSensor_center_up = 25;
 
-uint16_t reads[10];
+int16_t reads[10];
 
 int ledState = LOW;  // variable used to store the last LED status, to toggle the light
 
 
-const uint8_t down_right_leds[] = { 1, 2, 3, 4 };
-const uint8_t right_leds[] = { 4, 5, 6, 7 };
-const uint8_t up_right_leds[] = { 7, 8, 9, 10 };
-const uint8_t up_leds[] = { 10, 11, 12, 13 };
-const uint8_t up_left_leds[] = { 13, 14, 15, 16 };
-const uint8_t left_leds[] = { 16, 17, 18, 19 };
-const uint8_t down_left_leds[] = { 19, 20, 21, 22 };
-const uint8_t down_leds[] = { 22, 23, 0, 1 };
+const uint8_t down_right_leds[] = {0, 1, 2, 3 };
+const uint8_t right_leds[] = {3, 4, 5, 6 };
+const uint8_t up_right_leds[] = {6, 7, 8, 9 };
+const uint8_t up_leds[] = {9, 10, 11, 12 };
+const uint8_t up_left_leds[] = {12, 13, 14, 15 };
+const uint8_t left_leds[] = {15, 16, 17, 18};
+const uint8_t down_left_leds[] = {18, 19, 20, 21};
+const uint8_t down_leds[] = {21, 22, 23, 0};
 
-const uint8_t segments[][LEDS_PER_DIV] = { { 1, 2, 3, 4 },
-                                           { 4, 5, 6, 7 },
-                                           { 7, 8, 9, 10 },
-                                           { 10, 11, 12, 13 },
-                                           { 13, 14, 15, 16 },
-                                           { 16, 17, 18, 19 },
-                                           { 19, 20, 21, 22 },
-                                           { 22, 23, 0, 1 } };
+const uint8_t segments[][LEDS_PER_DIV] = { { 0, 1, 2, 3},
+                                           { 3, 4, 5, 6},
+                                           { 6, 7, 8, 9 },
+                                           { 9, 10, 11, 12},
+                                           { 12, 13, 14, 15 },
+                                           { 15, 16, 17, 18 },
+                                           { 18, 19, 20, 21},
+                                           { 21, 22, 23, 0 } };
 
 int state;
 int prev_state;
@@ -136,13 +147,16 @@ class MyCallbacks: public BLECharacteristicCallbacks {
     String rxValue = pCharacteristic->getValue();
 
       if (rxValue.length() > 0) {
+        if (DEBUG){
         Serial.println("*********");
         Serial.print("Received Value: ");
+        
         for (int i = 0; i < rxValue.length(); i++)
           Serial.print(rxValue[i]);
 
         Serial.println();
         Serial.println("*********");
+        }
         if (rxValue=="restart"){
           next_state=DEFAULT;
         }
@@ -154,9 +168,15 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 void setup() {
   state = 0;
   pinMode(LED_BUILTIN, OUTPUT);  // declare the ledPin as as OUTPUT
+  pinMode(15, INPUT_PULLDOWN);
+
+
+
   FastLED.addLeds<WS2811, LED_PIN, RGB>(leds, NUM_LEDS);
   Serial.begin(115200);  // use the serial port
   digitalWrite(LED_BUILTIN, HIGH);
+
+
 
   BLEDevice::init(DEVICE_NAME);
   // Create the BLE Server
@@ -186,36 +206,26 @@ void setup() {
 
   // Start advertising
   pServer->getAdvertising()->start();
+
+  //ADC 1 
+  ads1.setGain(GAIN_ONE);
+  ads1.begin(ADC_1_I2C_ADDR);
+  ads2.setDataRate(RATE_ADS1115_860SPS);
+
+  //ADC 2 
+  ads2.setGain(GAIN_ONE);
+  ads2.begin(ADC_2_I2C_ADDR);
+  ads2.setDataRate(RATE_ADS1115_860SPS);
   
   //breath();
   timer.every(50, state_machine);
-  timer.every(10, b_read_sensors);
+  timer.every(50, b_read_sensors);
   timer.every(30, b_bluetooth_comms);
 }
 
 void loop() {
   timer.tick();
   //v_read_sensors();
-
-  /*
-  v_read_sensors();
-  
-
-
-  
-
-  v_set_down_right(read_to_brightness(down_right_read));
-  v_set_up_right(read_to_brightness(up_right_read));
-  v_set_down_left(read_to_brightness(down_left_read));
-  v_set_up_left(read_to_brightness(up_left_read));
-
-  v_set_up(read_to_brightness(interpolate_reads(up_left_read,up_right_read)));
-  v_set_down(read_to_brightness(interpolate_reads(down_left_read,down_right_read)));
-  v_set_left(read_to_brightness(interpolate_reads(up_left_read, down_left_read)));
-  v_set_right(read_to_brightness(interpolate_reads(up_right_read,down_right_read)));
-  */
-
-
 
   //delay(1);  // delay to avoid overloading the serial port buffer
 }
@@ -233,7 +243,7 @@ bool state_machine(void *) {
     case START:
       countdown_led = NUM_LEDS;
       digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-      task_countdown = timer.every(1000 / NUM_LEDS, countdown);
+      task_countdown = timer.every(PREP_TIME_MS / NUM_LEDS, countdown);
       next_state = STARTING;
       break;
 
@@ -257,7 +267,7 @@ bool state_machine(void *) {
       break;
     case WAIT_HIT:
       if (reads[pattern_2[actual_pattern_position]] > THRESHOLD) {
-        Serial.println("\n\n\n HIT! \n\n\n");
+        if (DEBUG) {Serial.println("\n\n\n HIT! \n\n\n");}
         FastLED.clear();
         for (int i = 0; i < LEDS_PER_DIV; i++) {
           leds[segments[pattern_2[actual_pattern_position]][i]] = CRGB(0, MAX_BRIGHTNESS, 0);
@@ -278,14 +288,6 @@ bool state_machine(void *) {
   }
   return true;
 }
-
-
-
-
-
-
-
-
 
 
 

@@ -11,14 +11,14 @@
 
 
 
-#define DEBUG false
+#define DEBUG true
 
 #define LED_PIN 14          // Replace with the pin number you used for DATA connection
 #define NUM_LEDS 24         // Replace with the number of LEDs in your strip
 #define FADE_DELAY 1        // Delay between brightness changes (in milliseconds)
 #define MAX_BRIGHTNESS 255  //255 // Maximum brightness value
 #define LEDS_PER_DIV 4
-#define THRESHOLD 3000
+#define THRESHOLD 2000
 #define PREP_TIME_MS 1000
 #define LED_BUILTIN 2
 
@@ -207,10 +207,12 @@ void setup() {
   // Start advertising
   pServer->getAdvertising()->start();
 
+
+  //Wire.setClock(1000000);
   //ADC 1 
   ads1.setGain(GAIN_ONE);
   ads1.begin(ADC_1_I2C_ADDR);
-  ads2.setDataRate(RATE_ADS1115_860SPS);
+  ads1.setDataRate(RATE_ADS1115_860SPS);
 
   //ADC 2 
   ads2.setGain(GAIN_ONE);
@@ -218,9 +220,9 @@ void setup() {
   ads2.setDataRate(RATE_ADS1115_860SPS);
   
   //breath();
-  timer.every(50, state_machine);
-  timer.every(50, b_read_sensors);
-  timer.every(30, b_bluetooth_comms);
+  timer.every(5, state_machine);
+  timer.every(5, b_read_sensors);
+  timer.every(50, b_bluetooth_comms);
 }
 
 void loop() {
